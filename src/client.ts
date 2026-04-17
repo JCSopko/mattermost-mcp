@@ -137,6 +137,36 @@ export class MattermostClient {
     return response.json() as Promise<PostsResponse>;
   }
 
+  async updatePost(postId: string, message: string): Promise<Post> {
+    const url = `${this.baseUrl}/posts/${postId}/patch`;
+    const body = { message };
+
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: this.headers,
+      body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to update post: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json() as Promise<Post>;
+  }
+
+  async deletePost(postId: string): Promise<void> {
+    const url = `${this.baseUrl}/posts/${postId}`;
+
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: this.headers
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to delete post: ${response.status} ${response.statusText}`);
+    }
+  }
+
   // Reaction-related methods
   async addReaction(postId: string, emojiName: string): Promise<Reaction> {
     const url = `${this.baseUrl}/reactions`;

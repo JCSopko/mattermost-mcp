@@ -1,10 +1,12 @@
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { MattermostClient } from "../client.js";
-import { 
-  PostMessageArgs, 
-  ReplyToThreadArgs, 
-  AddReactionArgs, 
-  GetThreadRepliesArgs 
+import {
+  PostMessageArgs,
+  ReplyToThreadArgs,
+  AddReactionArgs,
+  GetThreadRepliesArgs,
+  EditMessageArgs,
+  DeleteMessageArgs
 } from "../types.js";
 
 // Tool definition for posting a message
@@ -199,6 +201,118 @@ export async function handleAddReaction(
     };
   } catch (error) {
     console.error("Error adding reaction:", error);
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+// Tool definition for editing a message
+export const editMessageTool: Tool = {
+  name: "mattermost_edit_message",
+  description: "Edit an existing Mattermost message. Use this to fix errors instead of posting corrections.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      post_id: {
+        type: "string",
+        description: "The ID of the message to edit",
+      },
+      message: {
+        type: "string",
+        description: "The new message text (replaces the entire message)",
+      },
+    },
+    required: ["post_id", "message"],
+  },
+};
+
+// Tool definition for deleting a message
+export const deleteMessageTool: Tool = {
+  name: "mattermost_delete_message",
+  description: "Delete a Mattermost message. Use this to remove erroneous posts instead of posting 'ignore the above'.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      post_id: {
+        type: "string",
+        description: "The ID of the message to delete",
+      },
+    },
+    required: ["post_id"],
+  },
+};
+
+// Tool handler for editing a message
+export async function handleEditMessage(
+  client: MattermostClient,
+  args: EditMessageArgs
+) {
+  const { post_id, message } = args;
+
+  try {
+    const response = await client.updatePost(post_id, message);
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            id: response.id,
+            channel_id: response.channel_id,
+            message: response.message,
+            edit_at: new Date(response.edit_at).toISOString(),
+          }, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    console.error("Error editing message:", error);
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+// Tool handler for deleting a message
+export async function handleDeleteMessage(
+  client: MattermostClient,
+  args: DeleteMessageArgs
+) {
+  const { post_id } = args;
+
+  try {
+    await client.deletePost(post_id);
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            deleted: true,
+            post_id,
+          }, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    console.error("Error deleting message:", error);
     return {
       content: [
         {

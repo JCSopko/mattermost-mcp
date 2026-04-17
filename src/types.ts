@@ -34,6 +34,15 @@ export interface GetThreadRepliesArgs {
   post_id: string;
 }
 
+export interface EditMessageArgs {
+  post_id: string;
+  message: string;
+}
+
+export interface DeleteMessageArgs {
+  post_id: string;
+}
+
 export interface GetUsersArgs {
   page?: number;
   limit?: number;

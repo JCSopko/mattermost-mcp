@@ -5,15 +5,19 @@ import {
   handleListChannels,
   handleGetChannelHistory
 } from "./channels.js";
-import { 
-  postMessageTool, 
-  replyToThreadTool, 
-  addReactionTool, 
+import {
+  postMessageTool,
+  replyToThreadTool,
+  addReactionTool,
   getThreadRepliesTool,
+  editMessageTool,
+  deleteMessageTool,
   handlePostMessage,
   handleReplyToThread,
   handleAddReaction,
-  handleGetThreadReplies
+  handleGetThreadReplies,
+  handleEditMessage,
+  handleDeleteMessage
 } from "./messages.js";
 import { 
   getUsersTool, 
@@ -38,6 +42,8 @@ export const tools: Tool[] = [
   getThreadRepliesTool,
   getUsersTool,
   getUserProfileTool,
+  editMessageTool,
+  deleteMessageTool,
   runMonitoringTool
 ];
 
@@ -54,6 +60,8 @@ export const toolHandlers: Record<string, Function> = {
   mattermost_get_thread_replies: handleGetThreadReplies,
   mattermost_get_users: handleGetUsers,
   mattermost_get_user_profile: handleGetUserProfile,
+  mattermost_edit_message: handleEditMessage,
+  mattermost_delete_message: handleDeleteMessage,
   mattermost_run_monitoring: handleRunMonitoring
 };
 
