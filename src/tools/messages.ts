@@ -80,7 +80,7 @@ export const addReactionTool: Tool = {
 // Tool definition for getting thread replies
 export const getThreadRepliesTool: Tool = {
   name: "mattermost_get_thread_replies",
-  description: "Get all replies in a message thread",
+  description: "Get all replies in a message thread. Includes emoji reactions per post by default.",
   inputSchema: {
     type: "object",
     properties: {
@@ -92,8 +92,29 @@ export const getThreadRepliesTool: Tool = {
         type: "string",
         description: "The ID of the parent message",
       },
+      include_reactions: {
+        type: "boolean",
+        description: "Include emoji reactions on each post (default true). Set false to skip the per-post reaction fetch.",
+        default: true,
+      },
     },
     required: ["channel_id", "post_id"],
+  },
+};
+
+// Tool definition for getting reactions on a single post
+export const getReactionsTool: Tool = {
+  name: "mattermost_get_reactions",
+  description: "Get all emoji reactions on a specific Mattermost message. Returns the raw reaction list plus an aggregated-by-emoji map (emoji_name -> [user_ids]).",
+  inputSchema: {
+    type: "object",
+    properties: {
+      post_id: {
+        type: "string",
+        description: "The ID of the message to get reactions for",
+      },
+    },
+    required: ["post_id"],
   },
 };
 
@@ -327,40 +348,131 @@ export async function handleDeleteMessage(
   }
 }
 
+// Helper to fetch reactions for a list of post IDs in parallel.
+// Returns a map of post_id -> { reactions, aggregated_by_emoji }.
+// Errors per post are swallowed and produce empty entries so a single failure doesn't break the batch.
+export async function fetchReactionsForPosts(
+  client: MattermostClient,
+  postIds: string[]
+): Promise<Record<string, { reactions: any[]; aggregated_by_emoji: Record<string, string[]>; error?: string }>> {
+  const results = await Promise.all(postIds.map(async (id) => {
+    try {
+      const reactions = await client.getReactions(id);
+      const aggregated: Record<string, string[]> = {};
+      (reactions || []).forEach((r: any) => {
+        if (!aggregated[r.emoji_name]) aggregated[r.emoji_name] = [];
+        aggregated[r.emoji_name].push(r.user_id);
+      });
+      return [id, { reactions: reactions || [], aggregated_by_emoji: aggregated }] as const;
+    } catch (err) {
+      return [id, {
+        reactions: [],
+        aggregated_by_emoji: {},
+        error: err instanceof Error ? err.message : String(err)
+      }] as const;
+    }
+  }));
+  return Object.fromEntries(results);
+}
+
+// Tool handler for getting reactions on a post
+export async function handleGetReactions(
+  client: MattermostClient,
+  args: { post_id: string }
+) {
+  const { post_id } = args;
+
+  try {
+    const reactions = await client.getReactions(post_id);
+    const aggregated: Record<string, string[]> = {};
+    (reactions || []).forEach((r: any) => {
+      if (!aggregated[r.emoji_name]) aggregated[r.emoji_name] = [];
+      aggregated[r.emoji_name].push(r.user_id);
+    });
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            post_id,
+            reactions: reactions || [],
+            aggregated_by_emoji: aggregated,
+            total: (reactions || []).length,
+          }, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    console.error("Error getting reactions:", error);
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
 // Tool handler for getting thread replies
 export async function handleGetThreadReplies(
   client: MattermostClient,
-  args: GetThreadRepliesArgs
+  args: GetThreadRepliesArgs & { include_reactions?: boolean }
 ) {
-  const { post_id } = args;
-  
+  const { post_id, include_reactions = true } = args;
+
   try {
     const response = await client.getPostThread(post_id);
-    
-    // Format the posts for better readability
-    const formattedPosts = response.order.map(postId => {
+    const orderedIds: string[] = response.order;
+
+    const reactionsByPost = include_reactions
+      ? await fetchReactionsForPosts(client, orderedIds)
+      : {};
+
+    const formattedPosts = orderedIds.map(postId => {
       const post = response.posts[postId];
-      return {
+      const formatted: any = {
         id: post.id,
         user_id: post.user_id,
         message: post.message,
         create_at: new Date(post.create_at).toISOString(),
         root_id: post.root_id || null,
       };
+      if (include_reactions) {
+        const r = reactionsByPost[postId] || { reactions: [], aggregated_by_emoji: {} };
+        formatted.reactions = r.reactions;
+        formatted.aggregated_by_emoji = r.aggregated_by_emoji;
+      }
+      return formatted;
     });
-    
+
+    const rootPost = response.posts[post_id] ? (() => {
+      const rp: any = {
+        id: response.posts[post_id].id,
+        user_id: response.posts[post_id].user_id,
+        message: response.posts[post_id].message,
+        create_at: new Date(response.posts[post_id].create_at).toISOString(),
+      };
+      if (include_reactions) {
+        const r = reactionsByPost[post_id] || { reactions: [], aggregated_by_emoji: {} };
+        rp.reactions = r.reactions;
+        rp.aggregated_by_emoji = r.aggregated_by_emoji;
+      }
+      return rp;
+    })() : null;
+
     return {
       content: [
         {
           type: "text",
           text: JSON.stringify({
             posts: formattedPosts,
-            root_post: response.posts[post_id] ? {
-              id: response.posts[post_id].id,
-              user_id: response.posts[post_id].user_id,
-              message: response.posts[post_id].message,
-              create_at: new Date(response.posts[post_id].create_at).toISOString(),
-            } : null,
+            root_post: rootPost,
           }, null, 2),
         },
       ],

@@ -188,6 +188,17 @@ export class MattermostClient {
     return response.json() as Promise<Reaction>;
   }
 
+  async getReactions(postId: string): Promise<Reaction[]> {
+    const url = `${this.baseUrl}/posts/${postId}/reactions`;
+    const response = await fetch(url, { headers: this.headers });
+
+    if (!response.ok) {
+      throw new Error(`Failed to get reactions: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json() as Promise<Reaction[]>;
+  }
+
   // User-related methods
   async getUsers(limit: number = 100, page: number = 0): Promise<UsersResponse> {
     const url = new URL(`${this.baseUrl}/users`);
