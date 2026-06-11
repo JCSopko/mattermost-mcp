@@ -30,7 +30,8 @@ export function loadConfig(): Config {
 
     // Check if local config exists
     if (fs.existsSync(localConfigPath)) {
-      const configData = fs.readFileSync(localConfigPath, 'utf8');
+      // Tolerate a UTF-8 BOM — Windows tools (e.g. PowerShell 5.1 Set-Content) emit one
+      const configData = fs.readFileSync(localConfigPath, 'utf8').replace(/^\uFEFF/, '');
       const config = JSON.parse(configData) as Config;
       // Validate required fields
       validateConfig(config);
@@ -39,7 +40,7 @@ export function loadConfig(): Config {
 
     // Fall back to config.json
     const configPath = path.resolve(__dirname, '../config.json');
-    const configData = fs.readFileSync(configPath, 'utf8');
+    const configData = fs.readFileSync(configPath, 'utf8').replace(/^\uFEFF/, '');
     const config = JSON.parse(configData) as Config;
     // Validate required fields
     validateConfig(config);
